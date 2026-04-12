@@ -1,0 +1,8 @@
+==========================================================================
+|    NAME            |    DEPARTMENT         |    EMAIL                  |
+==========================================================================
+Ahmed Khan           |  Computer Science     |  ahmed@kicsit.edu.pk      |
+Maria Siddiqui       |  Software Engineering |  maria@kicsit.edu.pk      |
+Bilal Raza           |  Mathematics          |  bilal@kicsit.edu.pk      |
+Sana Malik           |  Physics              |  sana@kicsit.edu.pk       |
+==========================================================================

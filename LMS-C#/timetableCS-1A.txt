@@ -1,0 +1,11 @@
+==========================================================================
+|                    TIMETABLE  -  BSCS 1A                               |
+==========================================================================
+|  DAY        |  08:00-09:30   |  09:30-11:00   |  11:00-12:30          |
+==========================================================================
+|  Monday     |  Programming   |  Mathematics   |  English              |
+|  Tuesday    |  Islamic St.   |  Physics       |  Programming Lab      |
+|  Wednesday  |  Mathematics   |  English       |  Pak Studies          |
+|  Thursday   |  Programming   |  Islamic St.   |  Physics              |
+|  Friday     |  English       |  Mathematics   |  Programming          |
+==========================================================================

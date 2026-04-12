@@ -1,0 +1,30 @@
+Which of the following is NOT a programming language?
+A) Python
+B) Java
+C) HTML
+D) C++
+C
+What does CPU stand for?
+A) Central Processing Unit
+B) Computer Personal Unit
+C) Central Processor Utility
+D) Core Processing Unit
+A
+Which data structure uses LIFO principle?
+A) Queue
+B) Stack
+C) Array
+D) Tree
+B
+What is the output of 5 % 2 in most programming languages?
+A) 2
+B) 2.5
+C) 1
+D) 0
+C
+Which of the following is a loop in C#?
+A) repeat
+B) loop
+C) foreach
+D) scan
+C
