@@ -1,13 +1,11 @@
-﻿using Spectre.Console;
+﻿using KICSITManagementSystem.Data;
+using KICSITManagementSystem.Models;
+using Spectre.Console;
 
 namespace KICSITManagementSystem
 {
     internal class GeneralView
     {
-        private readonly string FacultyFile = AppPaths.FacultyData;
-        private readonly string CourseFile = AppPaths.CourseView;
-        private readonly string AdmFile = AppPaths.AdmPortal;
-
         public void Show()
         {
             while (true)
@@ -66,24 +64,31 @@ namespace KICSITManagementSystem
         {
             UI.MainLogo();
             AnsiConsole.MarkupLine("[bold]Faculty information[/]\n");
-            UI.DisplayFile(FacultyFile, "Faculty");
+            List<FacultyMemberDocument> members = FacultyRepository.GetAllAsync().ConfigureAwait(false).GetAwaiter().GetResult();
+            UI.DisplayFacultyTable(members);
         }
 
         private void ShowCourses()
         {
             UI.MainLogo();
             AnsiConsole.MarkupLine("[bold]Available courses[/]\n");
-            UI.DisplayFile(CourseFile, "Courses");
+            List<string> lines = SiteContentRepository.GetLinesAsync(SiteContentRepository.IdCourses)
+                .ConfigureAwait(false).GetAwaiter().GetResult();
+            UI.DisplayPlainLinesTable(lines);
         }
 
         private void ShowAdmissionPortal()
         {
             UI.MainLogo();
             AnsiConsole.MarkupLine("[bold]Admission portal[/]\n");
-            UI.DisplayFile(AdmFile, "Admissions");
+            List<string> admission = SiteContentRepository.GetLinesAsync(SiteContentRepository.IdAdmission)
+                .ConfigureAwait(false).GetAwaiter().GetResult();
+            UI.DisplayPlainLinesTable(admission);
             AnsiConsole.WriteLine();
             AnsiConsole.MarkupLine("[bold]Available courses[/]\n");
-            UI.DisplayFile(CourseFile, "Courses");
+            List<string> courses = SiteContentRepository.GetLinesAsync(SiteContentRepository.IdCourses)
+                .ConfigureAwait(false).GetAwaiter().GetResult();
+            UI.DisplayPlainLinesTable(courses);
         }
     }
 }

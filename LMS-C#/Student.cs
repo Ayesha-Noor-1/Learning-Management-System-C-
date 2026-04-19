@@ -2,94 +2,109 @@
 using System.Diagnostics;
 using System.IO;
 using System.Threading;
+using KICSITManagementSystem.Data;
+using KICSITManagementSystem.Models;
+using KICSITManagementSystem.Oop;
 using Spectre.Console;
 
 namespace KICSITManagementSystem
 {
-    internal class Student
+    /// <summary>Student portal — <see cref="PortalBase"/> for shared menu lifecycle (inheritance + template method).</summary>
+    internal sealed class Student : PortalBase
     {
-        private readonly string _name;
-
-        private readonly string AttendanceFile = AppPaths.Attendance;
-        private readonly string NoticeFile = AppPaths.NoticeBoard;
-        private readonly string TimetableFile = AppPaths.Timetable;
-        private readonly string QuizFile = AppPaths.QuizFile;
-        private readonly string ResultFile = AppPaths.QuizResult;
+        private readonly string _attendanceFile = AppPaths.Attendance;
+        private readonly string _timetableFile = AppPaths.Timetable;
+        private readonly string _quizFile = AppPaths.QuizFile;
 
         public Student(string name)
+            : base(name)
         {
-            _name = name;
         }
 
-        public void ShowMenu()
+        /// <summary>Kept for readability at call sites; forwards to <see cref="IPortal.Run"/>.</summary>
+        public void ShowMenu() => Run();
+
+        protected override void DrawRoleHeader() => UI.StudentLogo();
+
+        protected override string GetWelcomeAccentOpening() => "[aqua]";
+
+        protected override string GetWelcomeAccentClosing() => "[/]";
+
+        protected override string ReturnConfirmPrompt =>
+            "Return to the student menu? (No will sign you out)";
+
+        protected override SelectionPrompt<string> BuildMenuPrompt()
         {
-            while (true)
+            return new SelectionPrompt<string>()
+                .Title("[bold]Student menu[/]")
+                .PageSize(10)
+                .HighlightStyle(new Style(Color.Black, Color.SeaGreen1))
+                .AddChoices(
+                    "Attendance",
+                    "Notice board",
+                    "Timetable",
+                    "Take quiz",
+                    "My quiz results",
+                    "Download my quiz results (CSV)",
+                    "Logout");
+        }
+
+        protected override bool ExecuteSelection(string action)
+        {
+            switch (action)
             {
-                UI.ClearScreen();
-                UI.StudentLogo();
-                AnsiConsole.MarkupLine($"[bold]Welcome,[/] [aqua]{Markup.Escape(_name.ToUpperInvariant())}[/]\n");
-
-                string action = AnsiConsole.Prompt(
-                    new SelectionPrompt<string>()
-                        .Title("[bold]Student menu[/]")
-                        .PageSize(10)
-                        .HighlightStyle(new Style(Color.Black, Color.SeaGreen1))
-                        .AddChoices(
-                            "Attendance",
-                            "Notice board",
-                            "Timetable",
-                            "Take quiz",
-                            "Quiz results",
-                            "Logout"));
-
-                if (action == "Logout")
+                case "Attendance":
+                    ShowAttendance();
                     break;
-
-                UI.ClearScreen();
-
-                switch (action)
-                {
-                    case "Attendance":
-                        ShowAttendance();
-                        break;
-                    case "Notice board":
-                        ShowNoticeBoard();
-                        break;
-                    case "Timetable":
-                        ShowTimetable();
-                        break;
-                    case "Take quiz":
-                        TakeQuiz();
-                        break;
-                    case "Quiz results":
-                        ViewResult();
-                        break;
-                }
-
-                if (!UI.Confirm("Return to the student menu? (No will sign you out)"))
+                case "Notice board":
+                    ShowNoticeBoard();
+                    break;
+                case "Timetable":
+                    ShowTimetable();
+                    break;
+                case "Take quiz":
+                    TakeQuiz();
+                    break;
+                case "My quiz results":
+                    ViewMyQuizResults();
+                    break;
+                case "Download my quiz results (CSV)":
+                    DownloadMyQuizResultsCsv();
                     break;
             }
+
+            return true;
         }
 
         private void ShowAttendance()
         {
             UI.StudentLogo();
             AnsiConsole.MarkupLine("[bold]Attendance[/]\n");
-            UI.DisplayFile(AttendanceFile, "Attendance");
+            UI.DisplayAttendanceTable(_attendanceFile);
         }
 
         private void ShowNoticeBoard()
         {
             UI.StudentLogo();
             AnsiConsole.MarkupLine("[bold]Notice board[/]\n");
-            UI.DisplayFile(NoticeFile, "Notices");
+
+            List<NoticeDocument> notices = NoticeRepository.GetAllOrderedAsync()
+                .ConfigureAwait(false).GetAwaiter().GetResult();
+
+            if (notices.Count == 0)
+            {
+                UI.Info("(No notices yet.)");
+                return;
+            }
+
+            UI.DisplayNoticesTable(notices.ConvertAll(n => n.Body));
         }
 
         private void ShowTimetable()
         {
             UI.MainLogo();
             AnsiConsole.MarkupLine("[bold]Timetable[/]\n");
-            UI.DisplayFile(TimetableFile, "Timetable");
+            UI.DisplayTimetableFromFile(_timetableFile);
         }
 
         private void TakeQuiz()
@@ -98,17 +113,31 @@ namespace KICSITManagementSystem
             UI.ClearScreen();
             UI.StudentLogo();
 
+            UserDocument? account = UserRepository.FindByUsernameAndRoleAsync(DisplayUsername, "Student")
+                .ConfigureAwait(false).GetAwaiter().GetResult();
+            if (account == null)
+            {
+                UI.Error("Could not resolve your account. Please sign in again.");
+                return;
+            }
+
             string quizName = UI.AskLine("Name (for result sheet): ");
             string roll = UI.AskLine("Registration number: ");
 
-            if (!File.Exists(QuizFile))
+            if (!InputValidation.IsMeaningful(quizName) || !InputValidation.IsMeaningful(roll, maxLength: 64))
+            {
+                UI.Error("Name and registration number are required (registration max 64 characters).");
+                return;
+            }
+
+            if (!File.Exists(_quizFile))
             {
                 UI.Error("No quiz available yet.");
                 return;
             }
 
-            string[] allLines = File.ReadAllLines(QuizFile);
-            List<string> lines = new List<string>();
+            string[] allLines = File.ReadAllLines(_quizFile);
+            var lines = new List<string>();
             foreach (string line in allLines)
             {
                 if (!string.IsNullOrWhiteSpace(line))
@@ -124,7 +153,7 @@ namespace KICSITManagementSystem
             int marks = 0;
             int questionCount = 0;
 
-            Stopwatch stopwatch = new Stopwatch();
+            var stopwatch = new Stopwatch();
             stopwatch.Start();
 
             for (int i = 0; i + 5 < lines.Count; i += 6)
@@ -162,18 +191,71 @@ namespace KICSITManagementSystem
             summary.AddRow("Percentage", $"{percentage:F1}%");
             AnsiConsole.Write(summary);
 
-            string resultLine =
-                $"{Environment.NewLine}{quizName}\t|\t{roll}\t|\t{marks}\t|\t{percentage:F1}%\t|\t{secondsTaken} seconds";
-            File.AppendAllText(ResultFile, resultLine);
+            var attempt = new QuizAttemptDocument
+            {
+                UserId = account.Id,
+                UsernameNormalized = account.UsernameNormalized,
+                SheetName = quizName.Trim(),
+                Roll = roll.Trim(),
+                Marks = marks,
+                QuestionCount = questionCount,
+                Percentage = percentage,
+                SecondsTaken = secondsTaken,
+                TakenUtc = DateTime.UtcNow
+            };
 
-            UI.Success("Result saved.");
+            QuizAttemptRepository.InsertAsync(attempt).ConfigureAwait(false).GetAwaiter().GetResult();
+
+            UI.Success("Result saved to the database.");
         }
 
-        private void ViewResult()
+        private void ViewMyQuizResults()
         {
             UI.MainLogo();
-            AnsiConsole.MarkupLine("[bold]Quiz results[/]\n");
-            UI.DisplayFile(ResultFile, "Results");
+            AnsiConsole.MarkupLine("[bold]My quiz results[/]\n");
+
+            UserDocument? account = UserRepository.FindByUsernameAndRoleAsync(DisplayUsername, "Student")
+                .ConfigureAwait(false).GetAwaiter().GetResult();
+            if (account == null)
+            {
+                UI.Error("Could not resolve your account.");
+                return;
+            }
+
+            List<QuizAttemptDocument> mine = QuizAttemptRepository.GetForUserAsync(account.Id)
+                .ConfigureAwait(false).GetAwaiter().GetResult();
+
+            UI.DisplayQuizAttemptsTable(mine, showLoginColumn: false);
+        }
+
+        private void DownloadMyQuizResultsCsv()
+        {
+            UI.MainLogo();
+            AnsiConsole.MarkupLine("[bold]Download my quiz results[/]\n");
+
+            UserDocument? account = UserRepository.FindByUsernameAndRoleAsync(DisplayUsername, "Student")
+                .ConfigureAwait(false).GetAwaiter().GetResult();
+            if (account == null)
+            {
+                UI.Error("Could not resolve your account.");
+                return;
+            }
+
+            List<QuizAttemptDocument> mine = QuizAttemptRepository.GetForUserAsync(account.Id)
+                .ConfigureAwait(false).GetAwaiter().GetResult();
+
+            if (mine.Count == 0)
+            {
+                UI.Info("You have no saved quiz attempts to export yet.");
+                return;
+            }
+
+            string path = Path.Combine(
+                AppPaths.UserDataFolder,
+                $"my_quiz_results_{DateTime.Now:yyyyMMdd_HHmmss}.csv");
+
+            QuizAttemptCsv.WriteFile(mine, path);
+            UI.Success($"Saved {mine.Count} row(s) to:\n{path}");
         }
     }
 }

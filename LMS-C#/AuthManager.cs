@@ -1,32 +1,20 @@
-﻿using System.IO;
-using System.Threading;
+﻿using System.Threading;
+using KICSITManagementSystem.Oop;
 using Spectre.Console;
 
 namespace KICSITManagementSystem
 {
-    internal class AuthManager
+    internal static class AuthManager
     {
-        private static bool ValidateLogin(string fileName, string name, string password)
+        /// <summary>Polymorphism: code depends on <see cref="ILoginValidator"/>, not a concrete type.</summary>
+        private static readonly ILoginValidator CredentialValidator = new MongoCredentialValidator();
+
+        private static void OpenPortalAfterSignIn(IPortal portal)
         {
-            if (!File.Exists(fileName))
-            {
-                UI.Error($"Login data file not found: {fileName}");
-                return false;
-            }
-
-            string[] lines = File.ReadAllLines(fileName);
-            string lowerName = name.ToLower().Trim();
-
-            for (int j = 0; j + 1 < lines.Length; j += 2)
-            {
-                string filName = lines[j].ToLower().Trim();
-                string filPass = lines[j + 1].Trim();
-
-                if (filName == lowerName && filPass == password)
-                    return true;
-            }
-
-            return false;
+            AnsiConsole.MarkupLine("[green]You are successfully signed in.[/]");
+            Thread.Sleep(900);
+            UI.ClearScreen();
+            portal.Run();
         }
 
         public static void LoginStudent()
@@ -39,14 +27,10 @@ namespace KICSITManagementSystem
                 string name = UI.AskLine("Name: ");
                 string password = UI.AskPassword("Password: ");
 
-                if (ValidateLogin(AppPaths.StudentLogin, name, password))
+                if (CredentialValidator.IsValid("Student", name, password))
                 {
-                    AnsiConsole.MarkupLine("[green]You are successfully signed in.[/]");
-                    Thread.Sleep(900);
-                    UI.ClearScreen();
-
-                    Student student = new Student(name);
-                    student.ShowMenu();
+                    IPortal portal = new Student(name);
+                    OpenPortalAfterSignIn(portal);
                     break;
                 }
 
@@ -65,14 +49,10 @@ namespace KICSITManagementSystem
                 string name = UI.AskLine("Name: ");
                 string password = UI.AskPassword("Password: ");
 
-                if (ValidateLogin(AppPaths.TeacherLogin, name, password))
+                if (CredentialValidator.IsValid("Teacher", name, password))
                 {
-                    AnsiConsole.MarkupLine("[green]You are successfully signed in.[/]");
-                    Thread.Sleep(900);
-                    UI.ClearScreen();
-
-                    Teacher teacher = new Teacher(name);
-                    teacher.ShowMenu();
+                    IPortal portal = new Teacher(name);
+                    OpenPortalAfterSignIn(portal);
                     break;
                 }
 
@@ -91,14 +71,10 @@ namespace KICSITManagementSystem
                 string name = UI.AskLine("Username: ");
                 string password = UI.AskPassword("Password: ");
 
-                if (ValidateLogin(AppPaths.AdminLogin, name, password))
+                if (CredentialValidator.IsValid("Admin", name, password))
                 {
-                    AnsiConsole.MarkupLine("[green]You are successfully signed in.[/]");
-                    Thread.Sleep(900);
-                    UI.ClearScreen();
-
-                    Admin admin = new Admin(name);
-                    admin.ShowMenu();
+                    IPortal portal = new Admin(name);
+                    OpenPortalAfterSignIn(portal);
                     break;
                 }
 

@@ -1,3 +1,4 @@
 <Solution>
   <Project Path="LMS-C#/LMS-C#.csproj" />
+  <Project Path="LMS-C#/LMS-C#.Tests/LMS-C#.Tests.csproj" />
 </Solution>

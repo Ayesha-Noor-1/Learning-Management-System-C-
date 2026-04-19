@@ -11,6 +11,12 @@ namespace KICSITManagementSystem
     // This class builds absolute paths pointing to:
     // C:\Users\YourName\Documents\KICSITData\
     // Visual Studio NEVER touches that folder — your data is safe permanently.
+    //
+    // Hybrid storage: accounts, students, faculty, notices, and public text blocks
+    // (courses/admission) live in MongoDB after first run. Timetable, attendance,
+    // quiz definition, and quiz results still use the .txt paths below at runtime.
+    // Login and roster files are still copied here and used only to seed MongoDB
+    // when the database is empty (see DatabaseInitializer).
 
     internal static class AppPaths
     {
@@ -19,6 +25,9 @@ namespace KICSITManagementSystem
             Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
             "KICSITData"
         );
+
+        /// <summary>Resolved <c>Documents\KICSITData</c> path (exports, quiz files, etc.).</summary>
+        public static string UserDataFolder => BaseFolder;
 
         // ── ALL FILE PATHS ───────────────────────────────────────────────────
         public static string StudentLogin => Path.Combine(BaseFolder, "loginstd.txt");

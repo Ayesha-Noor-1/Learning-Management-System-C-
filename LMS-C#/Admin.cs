@@ -1,83 +1,97 @@
 ﻿using System.Collections.Generic;
 using System.IO;
 using System.Threading;
+using KICSITManagementSystem.Data;
+using KICSITManagementSystem.Models;
+using KICSITManagementSystem.Oop;
+using MongoDB.Bson;
 using Spectre.Console;
 
 namespace KICSITManagementSystem
 {
-    internal class Admin
+    /// <summary>Admin portal — <see cref="PortalBase"/> with an extra exit path to the main menu.</summary>
+    internal sealed class Admin : PortalBase
     {
-        private readonly string _name;
-
-        private readonly string StudentLoginFile = AppPaths.StudentLogin;
-        private readonly string TeacherLoginFile = AppPaths.TeacherLogin;
-        private readonly string StudentDataFile = AppPaths.StudentData;
-        private readonly string FacultyFile = AppPaths.FacultyData;
-        private readonly string NoticeFile = AppPaths.NoticeBoard;
-        private readonly string TimetableFile = AppPaths.Timetable;
+        private readonly string _timetableFile = AppPaths.Timetable;
 
         public Admin(string name)
+            : base(name)
         {
-            _name = name;
         }
 
-        public void ShowMenu()
+        public void ShowMenu() => Run();
+
+        protected override void DrawRoleHeader() => UI.AdminLogo();
+
+        protected override string GetWelcomeAccentOpening() => "[orangered1]";
+
+        protected override string GetWelcomeAccentClosing() => "[/]";
+
+        protected override string ReturnConfirmPrompt =>
+            "Return to the admin menu? (No will sign you out)";
+
+        protected override SelectionPrompt<string> BuildMenuPrompt()
         {
-            while (true)
+            return new SelectionPrompt<string>()
+                .Title("[bold]Admin menu[/]")
+                .PageSize(10)
+                .HighlightStyle(new Style(Color.Black, Color.OrangeRed1))
+                .AddChoices(
+                    "Add student",
+                    "Remove student",
+                    "Notice board",
+                    "Add teacher account",
+                    "Update timetable",
+                    "Statistics",
+                    "Return to main menu",
+                    "Logout");
+        }
+
+        protected override bool ExecuteSelection(string action)
+        {
+            if (action == "Return to main menu")
             {
                 UI.ClearScreen();
-                UI.AdminLogo();
-                AnsiConsole.MarkupLine($"[bold]Welcome,[/] [orangered1]{Markup.Escape(_name.ToUpperInvariant())}[/]\n");
+                var gv = new GeneralView();
+                gv.Show();
+                return false;
+            }
 
-                string action = AnsiConsole.Prompt(
-                    new SelectionPrompt<string>()
-                        .Title("[bold]Admin menu[/]")
-                        .PageSize(10)
-                        .HighlightStyle(new Style(Color.Black, Color.OrangeRed1))
-                        .AddChoices(
-                            "Add student",
-                            "Remove student",
-                            "Notice board",
-                            "Add teacher account",
-                            "Update timetable",
-                            "Return to main menu",
-                            "Logout"));
-
-                if (action == "Logout")
+            switch (action)
+            {
+                case "Add student":
+                    AddStudent();
                     break;
-
-                if (action == "Return to main menu")
-                {
-                    UI.ClearScreen();
-                    GeneralView gv = new GeneralView();
-                    gv.Show();
-                    return;
-                }
-
-                UI.ClearScreen();
-
-                switch (action)
-                {
-                    case "Add student":
-                        AddStudent();
-                        break;
-                    case "Remove student":
-                        RemoveStudent();
-                        break;
-                    case "Notice board":
-                        ManageNotices();
-                        break;
-                    case "Add teacher account":
-                        AddTeacher();
-                        break;
-                    case "Update timetable":
-                        UpdateTimetable();
-                        break;
-                }
-
-                if (!UI.Confirm("Return to the admin menu? (No will sign you out)"))
+                case "Remove student":
+                    RemoveStudent();
+                    break;
+                case "Notice board":
+                    ManageNotices();
+                    break;
+                case "Add teacher account":
+                    AddTeacher();
+                    break;
+                case "Update timetable":
+                    UpdateTimetable();
+                    break;
+                case "Statistics":
+                    ShowStatistics();
                     break;
             }
+
+            return true;
+        }
+
+        private static void ShowStatistics()
+        {
+            UI.AdminLogo();
+            AnsiConsole.MarkupLine("[bold]Statistics[/]\n");
+
+            (long studentUsers, long teacherUsers, long adminUsers, long roster, long faculty, long notices, long attempts) =
+                DashboardStats.LoadAsync().ConfigureAwait(false).GetAwaiter().GetResult();
+
+            UI.DisplayDashboardStats(studentUsers, teacherUsers, adminUsers, roster, faculty, notices, attempts);
+            UI.PressAnyKey();
         }
 
         private void AddStudent()
@@ -85,18 +99,46 @@ namespace KICSITManagementSystem
             UI.AdminLogo();
             AnsiConsole.MarkupLine("[bold]Add student[/]\n");
 
-            string name = UI.AskLine("Student name: ");
-            string password = UI.AskLine("Student password: ");
-            string roll = UI.AskLine("Roll number: ");
-            string gender = UI.AskLine("Gender: ");
+            string name = UI.AskLine("Student name (login): ").Trim();
+            string password = UI.AskPassword("Student password: ");
+            string roll = UI.AskLine("Roll number: ").Trim();
+            string gender = UI.AskLine("Gender: ").Trim();
 
-            File.AppendAllText(StudentLoginFile,
-                name + Environment.NewLine + password + Environment.NewLine);
+            if (!InputValidation.IsMeaningful(name) || !InputValidation.IsMeaningful(password))
+            {
+                UI.Error("Name and password are required.");
+                Thread.Sleep(900);
+                return;
+            }
 
-            File.AppendAllText(StudentDataFile,
-                $"|  {roll}\t|  {name}\t|  {gender}  |" + Environment.NewLine);
+            if (UserRepository.UsernameExistsAsync(name).ConfigureAwait(false).GetAwaiter().GetResult())
+            {
+                UI.Error("That login name is already in use. Choose another.");
+                Thread.Sleep(900);
+                return;
+            }
 
-            UI.Success("Student added.");
+            var user = new UserDocument
+            {
+                Username = name,
+                UsernameNormalized = UserRepository.Normalize(name),
+                PasswordHash = BCrypt.Net.BCrypt.HashPassword(password),
+                Role = "Student"
+            };
+
+            UserRepository.InsertAsync(user).ConfigureAwait(false).GetAwaiter().GetResult();
+
+            var student = new StudentDocument
+            {
+                UserId = user.Id,
+                Roll = roll,
+                Name = name,
+                Gender = gender
+            };
+
+            StudentRepository.InsertAsync(student).ConfigureAwait(false).GetAwaiter().GetResult();
+
+            UI.Success("Student added (saved in MongoDB).");
             Thread.Sleep(800);
         }
 
@@ -105,19 +147,29 @@ namespace KICSITManagementSystem
             UI.AdminLogo();
             AnsiConsole.MarkupLine("[bold]Remove student[/]\n");
 
-            if (!File.Exists(StudentDataFile))
+            List<StudentDocument> students = StudentRepository.GetAllOrderedAsync()
+                .ConfigureAwait(false).GetAwaiter().GetResult();
+
+            if (students.Count == 0)
             {
-                UI.Error("Student data file not found.");
+                UI.Error("No students in the database.");
                 return;
             }
 
-            List<string> students = new List<string>(File.ReadAllLines(StudentDataFile));
-
             var table = new Table().Border(TableBorder.Rounded);
             table.AddColumn("Index");
-            table.AddColumn("Record");
+            table.AddColumn("Roll");
+            table.AddColumn("Name");
+            table.AddColumn("Gender");
             for (int i = 0; i < students.Count; i++)
-                table.AddRow(i.ToString(), Markup.Escape(students[i]));
+            {
+                StudentDocument s = students[i];
+                table.AddRow(
+                    i.ToString(),
+                    Markup.Escape(s.Roll),
+                    Markup.Escape(s.Name),
+                    Markup.Escape(s.Gender));
+            }
 
             AnsiConsole.Write(table);
 
@@ -127,11 +179,13 @@ namespace KICSITManagementSystem
                     .ValidationErrorMessage("Enter a valid index.")
                     .Validate(i => i >= 0 && i < students.Count));
 
-            string removed = students[index];
-            students.RemoveAt(index);
-            File.WriteAllLines(StudentDataFile, students);
+            StudentDocument removed = students[index];
+            if (removed.UserId is ObjectId uid)
+                UserRepository.DeleteByIdAsync(uid).ConfigureAwait(false).GetAwaiter().GetResult();
 
-            UI.Success($"Removed: {removed}");
+            StudentRepository.DeleteByIdAsync(removed.Id).ConfigureAwait(false).GetAwaiter().GetResult();
+
+            UI.Success($"Removed: {removed.Roll} — {removed.Name}");
             Thread.Sleep(900);
         }
 
@@ -162,7 +216,7 @@ namespace KICSITManagementSystem
                         UI.ClearScreen();
                         UI.AdminLogo();
                         AnsiConsole.MarkupLine("[bold]Notice board[/]\n");
-                        UI.DisplayFile(NoticeFile, "Notices");
+                        DisplayNoticesFromDatabase();
                         UI.PressAnyKey();
                         break;
 
@@ -170,10 +224,19 @@ namespace KICSITManagementSystem
                         UI.ClearScreen();
                         UI.AdminLogo();
                         string notice = UI.AskLine("New notice: ");
-                        File.AppendAllText(NoticeFile,
-                            $"|  {notice}  \t\t|" + Environment.NewLine +
-                            "__________________________________________________________________________"
-                            + Environment.NewLine);
+                        if (!InputValidation.IsMeaningful(notice))
+                        {
+                            UI.Error("Notice text cannot be empty.");
+                            Thread.Sleep(800);
+                            break;
+                        }
+
+                        var doc = new NoticeDocument
+                        {
+                            Body = notice.Trim(),
+                            CreatedUtc = DateTime.UtcNow
+                        };
+                        NoticeRepository.InsertAsync(doc).ConfigureAwait(false).GetAwaiter().GetResult();
                         UI.Success("Notice added.");
                         Thread.Sleep(800);
                         break;
@@ -185,25 +248,40 @@ namespace KICSITManagementSystem
             }
         }
 
+        private static void DisplayNoticesFromDatabase()
+        {
+            List<NoticeDocument> notices = NoticeRepository.GetAllOrderedAsync()
+                .ConfigureAwait(false).GetAwaiter().GetResult();
+
+            if (notices.Count == 0)
+            {
+                UI.Info("(No notices yet.)");
+                return;
+            }
+
+            UI.DisplayNoticesTable(notices.ConvertAll(n => n.Body));
+        }
+
         private void RemoveNotice()
         {
             UI.ClearScreen();
             UI.AdminLogo();
             AnsiConsole.MarkupLine("[bold]Remove notice[/]\n");
 
-            if (!File.Exists(NoticeFile))
+            List<NoticeDocument> notices = NoticeRepository.GetAllOrderedAsync()
+                .ConfigureAwait(false).GetAwaiter().GetResult();
+
+            if (notices.Count == 0)
             {
-                UI.Error("Notice file not found.");
+                UI.Error("No notices to remove.");
                 return;
             }
 
-            List<string> lines = new List<string>(File.ReadAllLines(NoticeFile));
-
             var table = new Table().Border(TableBorder.Rounded);
             table.AddColumn("Index");
-            table.AddColumn("Line");
-            for (int i = 0; i < lines.Count; i++)
-                table.AddRow(i.ToString(), Markup.Escape(lines[i]));
+            table.AddColumn("Body");
+            for (int i = 0; i < notices.Count; i++)
+                table.AddRow(i.ToString(), Markup.Escape(notices[i].Body));
 
             AnsiConsole.Write(table);
 
@@ -211,12 +289,11 @@ namespace KICSITManagementSystem
                 new TextPrompt<int>("Index to remove:")
                     .PromptStyle("grey")
                     .ValidationErrorMessage("Enter a valid index.")
-                    .Validate(i => i >= 0 && i < lines.Count));
+                    .Validate(i => i >= 0 && i < notices.Count));
 
-            lines.RemoveAt(index);
-            File.WriteAllLines(NoticeFile, lines);
+            NoticeRepository.DeleteByIdAsync(notices[index].Id).ConfigureAwait(false).GetAwaiter().GetResult();
 
-            UI.Success("Notice line removed.");
+            UI.Success("Notice removed.");
             Thread.Sleep(800);
         }
 
@@ -225,20 +302,51 @@ namespace KICSITManagementSystem
             UI.AdminLogo();
             AnsiConsole.MarkupLine("[bold]Add teacher[/]\n");
 
-            string name = UI.AskLine("Teacher name: ");
-            string password = UI.AskLine("Teacher password: ");
-            string email = UI.AskLine("Email: ");
-            string department = UI.AskLine("Department: ");
+            string name = UI.AskLine("Teacher name (login): ").Trim();
+            string password = UI.AskPassword("Teacher password: ");
+            string email = UI.AskLine("Email: ").Trim();
+            string department = UI.AskLine("Department: ").Trim();
 
-            File.AppendAllText(TeacherLoginFile,
-                Environment.NewLine + name + Environment.NewLine + password + Environment.NewLine);
+            if (!InputValidation.IsMeaningful(name) || !InputValidation.IsMeaningful(password))
+            {
+                UI.Error("Name and password are required.");
+                Thread.Sleep(900);
+                return;
+            }
 
-            File.AppendAllText(FacultyFile,
-                $"{name}\t|\t{department}\t|\t{email}\t|" + Environment.NewLine);
+            if (UserRepository.UsernameExistsAsync(name).ConfigureAwait(false).GetAwaiter().GetResult())
+            {
+                UI.Error("That login name is already in use. Choose another.");
+                Thread.Sleep(900);
+                return;
+            }
 
-            UI.Success("Teacher added.");
+            var user = new UserDocument
+            {
+                Username = name,
+                UsernameNormalized = UserRepository.Normalize(name),
+                PasswordHash = BCrypt.Net.BCrypt.HashPassword(password),
+                Role = "Teacher"
+            };
+
+            UserRepository.InsertAsync(user).ConfigureAwait(false).GetAwaiter().GetResult();
+
+            var faculty = new FacultyMemberDocument
+            {
+                UserId = user.Id,
+                Name = name,
+                Department = department,
+                Email = email
+            };
+
+            FacultyRepository.InsertAsync(faculty).ConfigureAwait(false).GetAwaiter().GetResult();
+
+            UI.Success("Teacher added (saved in MongoDB).");
             AnsiConsole.MarkupLine("\n[bold]Updated faculty list[/]\n");
-            UI.DisplayFile(FacultyFile, "Faculty");
+
+            List<FacultyMemberDocument> members = FacultyRepository.GetAllAsync()
+                .ConfigureAwait(false).GetAwaiter().GetResult();
+            UI.DisplayFacultyTable(members);
             Thread.Sleep(1200);
         }
 
@@ -247,13 +355,13 @@ namespace KICSITManagementSystem
             UI.AdminLogo();
             AnsiConsole.MarkupLine("[bold]Update timetable[/]\n");
 
-            if (!File.Exists(TimetableFile))
+            if (!File.Exists(_timetableFile))
             {
                 UI.Error("Timetable file not found.");
                 return;
             }
 
-            List<string> lines = new List<string>(File.ReadAllLines(TimetableFile));
+            var lines = new List<string>(File.ReadAllLines(_timetableFile));
 
             var table = new Table().Border(TableBorder.Rounded);
             table.AddColumn("Line #");
@@ -273,11 +381,11 @@ namespace KICSITManagementSystem
             string updated = UI.AskLine("Updated content: ");
 
             lines[lineNum] = updated;
-            File.WriteAllLines(TimetableFile, lines);
+            File.WriteAllLines(_timetableFile, lines);
 
             UI.ClearScreen();
             AnsiConsole.MarkupLine("[bold]Updated timetable[/]\n");
-            UI.DisplayFile(TimetableFile, "Timetable");
+            UI.DisplayTimetableFromFile(_timetableFile);
             UI.Success("Timetable saved.");
             Thread.Sleep(900);
         }
