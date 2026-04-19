@@ -129,6 +129,58 @@ dotnet test LMS-C#.Tests\LMS-C#.Tests.csproj
 
 The test project lives under `LMS-C#/LMS-C#.Tests/`; the main app project excludes its `.cs` files so they are not compiled into the executable.
 
+### Docker (image + MongoDB)
+
+**Prerequisites:** [Docker Desktop](https://www.docker.com/products/docker-desktop/) (Windows/macOS) or Docker Engine with the [Compose plugin](https://docs.docker.com/compose/install/).
+
+This app is a **full-screen interactive console** (Spectre). In Docker you must run it with a **pseudo-TTY** (`-it`), or menus and colors will not work reliably.
+
+#### Step-by-step on another device (Docker is already installed there)
+
+Do everything **on the machine where Docker runs** (your laptop, lab PC, or Linux server). You do **not** need the .NET SDK on that machine—only Docker.
+
+1. **Start Docker** so the daemon is running (Docker Desktop: open it and wait until it says *Running*; Linux: `sudo systemctl start docker` if you use systemd).
+2. **Get the project files** onto that device, in any folder you like:
+   - **Git:** `git clone https://github.com/Ayesha-Noor-1/Learning-Management-System-C-.git` then `cd Learning-Management-System-C-` (or whatever folder name Git created).
+   - **ZIP/USB:** copy the whole repository folder so it still contains `Dockerfile` and `docker-compose.yml` at the **top level** next to the `LMS-C#` project folder.
+3. **Open a terminal in the repository root** — the directory where you see `Dockerfile`, `docker-compose.yml`, and `README.md` (not inside `LMS-C#` only).
+4. **Check Docker works:** run `docker version` — you should see *Client* and *Server* sections without errors.
+5. **Start MongoDB** (runs in the background and keeps data in a Docker volume):
+
+   **PowerShell (Windows):**
+
+   ```powershell
+   docker compose up -d mongo
+   ```
+
+   **Bash (Linux / macOS):**
+
+   ```bash
+   docker compose up -d mongo
+   ```
+
+6. Wait a few seconds the first time (Mongo pulls the `mongo:7` image). Optional check: `docker compose ps` — the `mongo` service should be *running* or *healthy*.
+7. **Build and run the LMS app interactively** (this opens the menu in your terminal; use keyboard to navigate):
+
+   ```powershell
+   docker compose run --rm -it --build lms
+   ```
+
+   (`docker compose` is the same on Windows, macOS, and Linux.)
+
+8. **Use the app** as usual. When you exit the program (or press Ctrl+C), the `lms` container stops; **MongoDB keeps running** until you shut it down.
+9. **Stop Mongo and remove the app’s containers** when you are done for the day:
+
+   ```powershell
+   docker compose down
+   ```
+
+10. **Data:** quiz/users in Mongo live in the **`mongo_data`** volume; files the app writes under `/root/Documents/KICSITData` (including CSV exports) use the **`kicsit_data`** volume. They survive `docker compose down`. To wipe them completely: `docker compose down -v`.
+
+**If Docker is on a remote Linux server (SSH):** SSH with a TTY so menus work, e.g. `ssh -t user@server "cd /path/to/repo && docker compose run --rm -it --build lms"`. Running over plain SSH without `-t` often breaks interactive consoles.
+
+**Image only (no Compose):** from the repo root, `docker build -t kicsit-lms .`, then `docker run --rm -it -e MONGODB_CONNECTION_STRING=... -e MONGODB_DATABASE_NAME=lms_database kicsit-lms` (point the connection string at any reachable MongoDB), plus `-v` if you want a host folder mounted for file data.
+
 ## Features
 
 | Area | Capabilities |
@@ -180,6 +232,8 @@ The console UI uses **[Spectre.Console](https://spectreconsole.net/)** for panel
 ## Project layout
 
 ```text
+Dockerfile              Multi-stage build (SDK → runtime) for the console app
+docker-compose.yml      MongoDB 7 + LMS service (env + volumes)
 LMS-C#/                 ← C# project and seed data files
   LMS-C#.Tests/         xUnit tests (separate csproj; friend assembly LMS.Tests)
   Program.cs            Entry point (initializes files + MongoDB)

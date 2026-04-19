@@ -1,0 +1,10 @@
+**/.git
+**/.vs
+**/.vscode
+.cursor
+**/bin
+**/obj
+**/*.user
+**/*.suo
+**/*.log
+LMS-C#/LMS-C#.Tests

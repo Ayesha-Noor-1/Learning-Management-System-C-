@@ -1,0 +1,36 @@
+# KICSIT LMS console app + MongoDB.
+# Interactive UI: use `docker compose run --rm -it --build lms` (see README).
+
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+
+  lms:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    stdin_open: true
+    tty: true
+    depends_on:
+      mongo:
+        condition: service_healthy
+    environment:
+      MONGODB_CONNECTION_STRING: mongodb://mongo:27017
+      MONGODB_DATABASE_NAME: lms_database
+    volumes:
+      - kicsit_data:/root/Documents/KICSITData
+
+volumes:
+  mongo_data:
+  kicsit_data:
