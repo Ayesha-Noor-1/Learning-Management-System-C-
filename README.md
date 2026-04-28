@@ -135,6 +135,27 @@ The test project lives under `LMS-C#/LMS-C#.Tests/`; the main app project exclud
 
 This app is a **full-screen interactive console** (Spectre). In Docker you must run it with a **pseudo-TTY** (`-it`), or menus and colors will not work reliably.
 
+#### Docker + MongoDB Atlas (no local Mongo container)
+
+If you want Docker to use **MongoDB Atlas** instead of a local Mongo container, use `docker-compose.atlas.yml`.
+
+**PowerShell (Windows):**
+
+```powershell
+# 1) Set your Atlas URI (do not commit this value to git)
+$env:MONGODB_CONNECTION_STRING="mongodb+srv://<user>:<pass>@<cluster>/<db>?retryWrites=true&w=majority&appName=<appName>"
+
+# Optional: if your URI does not include a /<db> path, set the db name explicitly
+$env:MONGODB_DATABASE_NAME="lms_database"
+
+# 2) Run the LMS app container (interactive)
+docker compose -f docker-compose.atlas.yml run --rm -it --build lms
+```
+
+Notes:
+- Your Atlas **Network Access** must allow the machine running Docker (your public IP, or `0.0.0.0/0` for quick testing).
+- If the Atlas password contains special characters, either URL-encode them or choose a simple alphanumeric password for testing.
+
 #### Step-by-step on another device (Docker is already installed there)
 
 Do everything **on the machine where Docker runs** (your laptop, lab PC, or Linux server). You do **not** need the .NET SDK on that machine—only Docker.
