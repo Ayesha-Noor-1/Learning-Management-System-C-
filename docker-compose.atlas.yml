@@ -1,0 +1,24 @@
+## Atlas-only compose file.
+## - Does NOT run a local MongoDB container.
+## - You must provide MONGODB_CONNECTION_STRING (mongodb+srv://...) from your shell env or a .env file.
+## Usage (PowerShell):
+##   $env:MONGODB_CONNECTION_STRING="mongodb+srv://USER:PASS@.../lms_database?retryWrites=true&w=majority&appName=Cluster0"
+##   $env:MONGODB_DATABASE_NAME="lms_database"
+##   docker compose -f docker-compose.atlas.yml run --rm -it --build lms
+
+services:
+  lms:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    stdin_open: true
+    tty: true
+    environment:
+      MONGODB_CONNECTION_STRING: ${MONGODB_CONNECTION_STRING:?set in shell env or .env file}
+      MONGODB_DATABASE_NAME: ${MONGODB_DATABASE_NAME:-lms_database}
+    volumes:
+      - kicsit_data:/root/Documents/KICSITData
+
+volumes:
+  kicsit_data:
+
