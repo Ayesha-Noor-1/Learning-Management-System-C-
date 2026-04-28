@@ -484,7 +484,18 @@ namespace KICSITManagementSystem
         public static void PressAnyKey(string caption = "Press any key to continue…")
         {
             AnsiConsole.MarkupLine($"[dim]{Markup.Escape(caption)}[/]");
-            Console.ReadKey(intercept: true);
+            try
+            {
+                // In detached Docker containers / CI / redirected stdin there may be no interactive console.
+                if (Console.IsInputRedirected)
+                    return;
+
+                Console.ReadKey(intercept: true);
+            }
+            catch (InvalidOperationException)
+            {
+                // No console available (e.g. docker -d); just continue.
+            }
         }
 
         public static bool Confirm(string message) =>
